@@ -1,29 +1,9 @@
 import hashlib
 
-from zope.interface import implements
-
-from twisted.internet.defer import succeed, inlineCallbacks
-from twisted.web.iweb import IBodyProducer
+from twisted.internet.defer import inlineCallbacks
 
 from ecoin_trade.heap import MinHeap
 from ecoin_trade.commands import UserOperation, MaxOperation, MinOperation
-
-class StringProducer(object):
-    implements(IBodyProducer)
-
-    def __init__(self, body):
-        self.body = body
-        self.length = len(body)
-
-    def startProducing(self, consumer):
-        consumer.write(self.body)
-        return succeed(None)
-
-    def pauseProducing(self):
-        pass
-
-    def stopProducing(self):
-        pass
 
 
 class Coin(object):
@@ -48,7 +28,7 @@ class Coin(object):
         else:
             raise ''
 
-    def add_to_check_operation(self, operation):
+    def add_to_dealing_operation(self, operation):
         self.dealing_operations += [operation]
 
     @inlineCallbacks
@@ -80,9 +60,6 @@ class Coin(object):
         raise NotImplementedError
 
     def stop_short(self, operation):
-        raise NotImplementedError
-
-    def get_current_price(self, *args):
         raise NotImplementedError
 
     def checkUserUndealedOperations(self, user):

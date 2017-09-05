@@ -2,15 +2,33 @@ import json
 import traceback
 from urllib import urlencode
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from zope.interface import implements
+from twisted.web.iweb import IBodyProducer
+from twisted.internet.defer import inlineCallbacks, returnValue, succeed
 from twisted.web.client import Agent, readBody
 from twisted.web.http_headers import Headers
 from twisted.internet import reactor
 from twisted.internet.endpoints import TCP4ClientEndpoint
 from twisted.internet.ssl import ClientContextFactory
 
-from .base import Coin, build_sign, StringProducer, Order
+from .base import Coin, build_sign, Order
 
+class StringProducer(object):
+    implements(IBodyProducer)
+
+    def __init__(self, body):
+        self.body = body
+        self.length = len(body)
+
+    def startProducing(self, consumer):
+        consumer.write(self.body)
+        return succeed(None)
+
+    def pauseProducing(self):
+        pass
+
+    def stopProducing(self):
+        pass
 
 class WebClientContextFactory(ClientContextFactory):
     def getContext(self, hostname, port):
@@ -56,6 +74,7 @@ class OKCoinApiMixin(object):
                 bodyProducer=StringProducer(body)
             )
             result = yield readBody(response)
+            print result
             data = json.loads(result)
             if not data['result']:
                 returnValue(None)
@@ -66,6 +85,7 @@ class OKCoinApiMixin(object):
                 returnValue(order)
         except Exception as exc:
             traceback.print_exc()
+            returnValue(None)
 
     @inlineCallbacks
     def trade(self, user, symbol, contract_type, price, amount, type, match_price, lever_rate):
@@ -135,33 +155,34 @@ class OKEXBTCFutureSeasonCoin(Coin, OKCoinApiMixin):
             self.process_operation(self.max_operations.pop())
         while not self.min_operations.is_empty() and price <= self.min_operations.peek().price:
             self.process_operation(self.min_operations.pop())
+        print price
 
 
-    def handle_result(self, operation, order):
+    def _handle_result(self, operation, order):
         if order is None:
             return
         operation.bind_order(order)
-        self.add_to_check_operation(operation)
+        self.add_to_dealing_operation(operation)
 
     @inlineCallbacks
     def long(self, operation):
         order = yield self.do_long(operation.user, 'btc_usd', 'quarter', operation.price, operation.amount)
-        self.handle_result(operation, order)
+        self._handle_result(operation, order)
 
     @inlineCallbacks
     def stop_long(self, operation):
         order = yield self.do_stop_long(operation.user, 'btc_usd', 'quarter', operation.price, operation.amount)
-        self.handle_result(operation, order)
+        self._handle_result(operation, order)
     
     @inlineCallbacks
     def short(self, operation):
         order = yield self.do_short(operation.user, 'btc_usd', 'quarter', operation.price, operation.amount)
-        self.handle_result(operation, order)
+        self._handle_result(operation, order)
 
     @inlineCallbacks
     def stop_short(self, operation):
-        result = yield self.do_stop_short(operation.user, 'btc_usd', 'quarter', operation.price, operation.amount)
-        self.handle_result(operation, result)
+        order = yield self.do_stop_short(operation.user, 'btc_usd', 'quarter', operation.price, operation.amount)
+        self._handle_result(operation, order)
 
     @inlineCallbacks
     def check_deal(self):
@@ -176,8 +197,7 @@ class OKEXBTCFutureSeasonCoin(Coin, OKCoinApiMixin):
                     next_op = next_op.next_op
                 self.dealing_operations.remove(operation)
             else:
-                order = yield self.get_order_info(user=operation.user, symbol='btc_usd', contract_type='quarter', order_id=operation.order.order_id)
-                print order.dealed
+                yield self.get_order_info(user=operation.user, symbol='btc_usd', contract_type='quarter', order_id=operation.order.order_id)
 
     def __str__(self):
         return self.__name__
