@@ -155,7 +155,7 @@ class OKEXBTCFutureSeasonCoin(Coin, OKCoinApiMixin):
             self.process_operation(self.max_operations.pop())
         while not self.min_operations.is_empty() and price <= self.min_operations.peek().price:
             self.process_operation(self.min_operations.pop())
-        print price
+        yield price
 
 
     def _handle_result(self, operation, order):

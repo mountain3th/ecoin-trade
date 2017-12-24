@@ -7,6 +7,8 @@ from twisted.internet import reactor, task, protocol
 from twisted.internet.defer import inlineCallbacks
 from twisted.application import service, strports
 from twisted.protocols import basic
+from twisted.python.log import PythonLoggingObserver
+from twisted.python import log
 
 from ecoin_trade.platforms.okcoin import OKEXBTCFutureSeasonCoin
 from ecoin_trade.commands import Command
@@ -120,7 +122,8 @@ class EcoinService(service.Service):
     @inlineCallbacks
     def _watch_prices(self):
         for platform in self.coin_platforms:
-            yield platform.check_price()
+            price = yield platform.check_price()
+            log.msg(price)
 
     @inlineCallbacks
     def _check_deal(self):
@@ -137,8 +140,19 @@ class EcoinService(service.Service):
     def stopService(self):
         service.Service.stopService(self)
 
+class trade_log_observer(PythonLoggingObserver):
+
+    file_log = open('trade.log', 'a')
+
+    def emit(self, eventDict):
+        message = eventDict['message']
+        self.file_log.write(''.join(message))
+
+log.startLoggingWithObserver(trade_log_observer().emit, setStdout=False)
+
 application = service.Application('ecoin')
 serviceCollection = service.IServiceCollection(application)
 ecoin_service = EcoinService()
 ecoin_service.setServiceParent(serviceCollection)
+
 strports.service('tcp:8000', ecoin_service.getControllerFactory()).setServiceParent(serviceCollection)
